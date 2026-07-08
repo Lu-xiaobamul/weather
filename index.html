@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多城市天气预报</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-white bg-gradient-to-br from-blue-500 to-indigo-700 transition-colors duration-700">
+
+    <div class="container mx-auto px-4 py-6 max-w-7xl h-screen flex flex-col">
+        <!-- 顶部标题与搜索 -->
+        <header class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+            <div>
+                <h1 class="text-3xl font-bold flex items-center gap-2">
+                    🌤️ 多城市天气预报
+                </h1>
+                <p class="text-blue-100 text-sm mt-1">添加多个城市，随时掌握各地天气</p>
+            </div>
+            
+            <div class="flex gap-2 w-full md:w-auto">
+                <input 
+                    type="text" 
+                    id="city-input" 
+                    placeholder="输入城市名称..." 
+                    class="flex-1 md:w-64 px-4 py-2 rounded-full text-gray-800 focus:outline-none focus:ring-4 focus:ring-blue-300 shadow-lg"
+                >
+                <button id="add-btn" class="bg-white text-blue-600 font-semibold px-5 py-2 rounded-full hover:bg-blue-50 transition shadow-lg">
+                    添加
+                </button>
+                <button id="location-btn" class="bg-blue-800 hover:bg-blue-900 text-white font-semibold px-4 py-2 rounded-full transition shadow-lg" title="定位当前城市">
+                    📍
+                </button>
+            </div>
+        </header>
+
+        <p id="error-msg" class="text-red-200 text-sm h-5 mb-2 text-center md:text-left"></p>
+
+        <!-- 主内容区 -->
+        <div class="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
+            
+            <!-- 左侧：城市列表 -->
+            <section class="lg:col-span-1 flex flex-col min-h-0">
+                <div class="glass rounded-3xl p-4 flex-1 flex flex-col min-h-0">
+                    <h2 class="text-lg font-bold mb-3 flex items-center justify-between">
+                        <span>我的城市</span>
+                        <span id="city-count" class="text-xs bg-white/30 px-2 py-0.5 rounded-full">0</span>
+                    </h2>
+                    <div id="city-list" class="flex-1 overflow-y-auto scrollbar-hide space-y-3 pr-1">
+                        <!-- 城市卡片会插入这里 -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 右侧：天气详情 -->
+            <section class="lg:col-span-2 flex flex-col min-h-0 overflow-y-auto scrollbar-hide">
+                <div id="weather-detail" class="hidden fade-in">
+                    <!-- 当前天气 -->
+                    <div class="glass rounded-3xl p-6 md:p-10 mb-6 text-center shadow-2xl relative overflow-hidden">
+                        <div class="relative z-10">
+                            <h2 id="detail-city" class="text-3xl md:text-4xl font-bold mb-1">--</h2>
+                            <p id="detail-date" class="text-blue-100 text-sm mb-4">--</p>
+                            
+                            <div class="flex items-center justify-center gap-4 mb-4">
+                                <div id="detail-icon" class="w-24 h-24"></div>
+                                <div>
+                                    <span id="detail-temp" class="text-6xl md:text-7xl font-bold">--</span>
+                                    <span class="text-3xl align-top">°C</span>
+                                </div>
+                            </div>
+                            
+                            <p id="detail-desc" class="text-2xl font-medium mb-6">--</p>
+                            
+                            <div class="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+                                <div class="bg-white/20 rounded-2xl p-3">
+                                    <p class="text-blue-100 text-xs mb-1">最高/最低</p>
+                                    <p id="detail-range" class="font-bold">-- / --</p>
+                                </div>
+                                <div class="bg-white/20 rounded-2xl p-3">
+                                    <p class="text-blue-100 text-xs mb-1">风速</p>
+                                    <p id="detail-wind" class="font-bold">-- km/h</p>
+                                </div>
+                                <div class="bg-white/20 rounded-2xl p-3">
+                                    <p class="text-blue-100 text-xs mb-1">湿度</p>
+                                    <p id="detail-humidity" class="font-bold">--%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 未来5天预报 -->
+                    <div class="glass rounded-3xl p-6 shadow-2xl">
+                        <h3 class="text-xl font-bold mb-4">未来 5 天预报</h3>
+                        <div id="forecast-list" class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <!-- 预报卡片 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 未选择城市时的提示 -->
+                <div id="empty-state" class="hidden glass rounded-3xl p-10 text-center h-full flex flex-col items-center justify-center">
+                    <p class="text-6xl mb-4">🗺️</p>
+                    <h3 class="text-2xl font-bold mb-2">没有城市</h3>
+                    <p class="text-blue-100">在上方搜索框添加城市，开始查看天气吧</p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // 天气代码映射
+        const weatherMap = {
+            0: { desc: '晴', icon: 'sun', bg: 'from-blue-400 to-blue-600' },
+            1: { desc: '多云', icon: 'cloud-sun', bg: 'from-blue-400 to-blue-500' },
+            2: { desc: '多云', icon: 'cloud', bg: 'from-gray-400 to-blue-500' },
+            3: { desc: '阴天', icon: 'cloud', bg: 'from-gray-500 to-slate-600' },
+            45: { desc: '雾', icon: 'cloud-fog', bg: 'from-gray-400 to-slate-500' },
+            48: { desc: '雾凇', icon: 'cloud-fog', bg: 'from-gray-400 to-slate-500' },
+            51: { desc: '毛毛雨', icon: 'cloud-drizzle', bg: 'from-slate-500 to-blue-700' },
+            53: { desc: '中雨', icon: 'cloud-drizzle', bg: 'from-slate-600 to-blue-800' },
+            55: { desc: '大雨', icon: 'cloud-rain', bg: 'from-slate-700 to-blue-900' },
+            61: { desc: '小雨', icon: 'cloud-rain', bg: 'from-slate-600 to-blue-800' },
+            63: { desc: '中雨', icon: 'cloud-rain', bg: 'from-slate-700 to-blue-900' },
+            65: { desc: '暴雨', icon: 'cloud-lightning', bg: 'from-slate-800 to-gray-900' },
+            71: { desc: '小雪', icon: 'snowflake', bg: 'from-blue-300 to-slate-400' },
+            73: { desc: '中雪', icon: 'snowflake', bg: 'from-blue-300 to-slate-500' },
+            75: { desc: '大雪', icon: 'snowflake', bg: 'from-slate-300 to-slate-600' },
+            80: { desc: '阵雨', icon: 'cloud-rain-wind', bg: 'from-slate-600 to-blue-800' },
+            81: { desc: '强阵雨', icon: 'cloud-rain-wind', bg: 'from-slate-700 to-blue-900' },
+            82: { desc: '暴雨', icon: 'cloud-lightning', bg: 'from-slate-800 to-gray-900' },
+            95: { desc: '雷雨', icon: 'cloud-lightning', bg: 'from-slate-800 to-gray-900' },
+            96: { desc: '雷暴', icon: 'cloud-lightning', bg: 'from-slate-900 to-gray-900' },
+            99: { desc: '雷暴', icon: 'cloud-lightning', bg: 'from-slate-900 to-gray-900' }
+        };
+
+        function getInfo(code) {
+            return weatherMap[code] || { desc: '未知', icon: 'help-circle', bg: 'from-blue-400 to-blue-600' };
+        }
+
+        const icons = {
+            'sun': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
+            'cloud-sun': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.62a4 4 0 0 0-5.02-2.662 4 4 0 0 0-3.95 4.561A4 4 0 0 0 8.4 21h7.2a4 4 0 0 0 .347-7.98Z"/></svg>',
+            'cloud': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>',
+            'cloud-fog': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h16"/><path d="M4 18h16"/><path d="M9.5 9.5a5 5 0 0 1 8.1 3.7"/></svg>',
+            'cloud-drizzle': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M8 19v1"/><path d="M8 14v1"/><path d="M16 19v1"/><path d="M16 14v1"/><path d="M12 21v1"/><path d="M12 16v1"/></svg>',
+            'cloud-rain': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 14v6"/><path d="M8 14v6"/><path d="M12 16v6"/></svg>',
+            'cloud-lightning': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973"/><path d="m13 12-3 5h4l-3 5"/></svg>',
+            'snowflake': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/><path d="m4.93 4.93 14.14 14.14"/><path d="m19.07 4.93-14.14 14.14"/></svg>',
+            'cloud-rain-wind': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M9.5 19H8.4"/><path d="M16 19h-1.4"/><path d="M12 21h-1.4"/></svg>',
+            'help-circle': '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>'
+        };
+
+        function getIcon(name) {
+            return icons[name] || icons['help-circle'];
+        }
+
+        // 状态管理
+        let cities = [];
+        let selectedCityId = null;
+
+        const cityInput = document.getElementById('city-input');
+        const addBtn = document.getElementById('add-btn');
+        const locationBtn = document.getElementById('location-btn');
+        const errorMsg = document.getElementById('error-msg');
+        const cityListEl = document.getElementById('city-list');
+        const weatherDetailEl = document.getElementById('weather-detail');
+        const emptyStateEl = document.getElementById('empty-state');
+        const cityCountEl = document.getElementById('city-count');
+
+        // 加载本地数据
+        function loadCities() {
+            const saved = localStorage.getItem('weather_cities');
+            const savedSelected = localStorage.getItem('weather_selected_city');
+            
+            if (saved) {
+                try {
+                    cities = JSON.parse(saved);
+                } catch (e) {
+                    cities = [];
+                }
+            } else {
+                cities = [{ id: 'beijing', name: '北京', lat: 39.9042, lon: 116.4074 }];
+                saveCities();
+            }
+
+            if (savedSelected) {
+                selectedCityId = savedSelected;
+            } else if (cities.length > 0) {
+                selectedCityId = cities[0].id;
+            }
+        }
+
+        function saveCities() {
+            localStorage.setItem('weather_cities', JSON.stringify(cities));
+            if (selectedCityId) {
+                localStorage.setItem('weather_selected_city', selectedCityId);
+            }
+        }
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            setTimeout(() => { errorMsg.textContent = ''; }, 3000);
+        }
+
+        // 添加城市
+        async function addCity(name) {
+            if (!name || !name.trim()) {
+                showError('请输入城市名称');
+                return;
+            }
+
+            const trimmed = name.trim();
+
+            // 检查是否已存在
+            if (cities.some(c => c.name === trimmed)) {
+                showError('该城市已存在');
+                // 选中该城市
+                const city = cities.find(c => c.name === trimmed);
+                selectCity(city.id);
+                return;
+            }
+
+            try {
+                const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(trimmed)}&count=1&language=zh&format=json`);
+                const data = await res.json();
+
+                if (!data.results || data.results.length === 0) {
+                    showError('未找到该城市，请检查输入');
+                    return;
+                }
+
+                const result = data.results[0];
+                const newCity = {
+                    id: Date.now().toString(),
+                    name: result.name,
+                    lat: result.latitude,
+                    lon: result.longitude
+                };
+
+                cities.push(newCity);
+                saveCities();
+                renderCityList();
+                selectCity(newCity.id);
+                cityInput.value = '';
+            } catch (err) {
+                showError('添加城市失败，请稍后重试');
+            }
+        }
+
+        // 删除城市
+        function deleteCity(e, id) {
+            e.stopPropagation();
+            cities = cities.filter(c => c.id !== id);
+            
+            if (selectedCityId === id) {
+                selectedCityId = cities.length > 0 ? cities[0].id : null;
+            }
+            
+            saveCities();
+            renderCityList();
+            if (selectedCityId) {
+                selectCity(selectedCityId);
+            } else {
+                showEmptyState();
+            }
+        }
+
+        // 选择城市
+        async function selectCity(id) {
+            selectedCityId = id;
+            saveCities();
+            renderCityList();
+            
+            const city = cities.find(c => c.id === id);
+            if (!city) return;
+
+            weatherDetailEl.classList.add('hidden');
+            emptyStateEl.classList.add('hidden');
+
+            try {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=6`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                renderDetail(city.name, data);
+            } catch (err) {
+                showError('获取天气失败');
+            }
+        }
+
+        // 渲染城市列表
+        function renderCityList() {
+            cityListEl.innerHTML = '';
+            cityCountEl.textContent = cities.length;
+
+            if (cities.length === 0) {
+                cityListEl.innerHTML = '<p class="text-center text-blue-100 text-sm mt-10">暂无城市，请添加</p>';
+                return;
+            }
+
+            cities.forEach(city => {
+                const isSelected = city.id === selectedCityId;
+                const card = document.createElement('div');
+                card.className = `relative p-4 rounded-2xl cursor-pointer transition flex items-center justify-between border ${isSelected ? 'bg-white/40 border-white/60 shadow-lg' : 'bg-white/10 border-white/20 hover:bg-white/20'}`;
+                card.onclick = () => selectCity(city.id);
+
+                card.innerHTML = `
+                    <div>
+                        <h3 class="font-bold text-lg">${city.name}</h3>
+                        <p class="text-xs text-blue-100">点击查看详情</p>
+                    </div>
+                    <button class="delete-btn w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-red-500 hover:text-white transition" title="删除">
+                        ×
+                    </button>
+                `;
+
+                card.querySelector('.delete-btn').onclick = (e) => deleteCity(e, city.id);
+                cityListEl.appendChild(card);
+            });
+        }
+
+        // 渲染详情
+        function renderDetail(cityName, data) {
+            const current = data.current;
+            const daily = data.daily;
+            const info = getInfo(current.weather_code);
+
+            // 更新背景
+            document.body.className = `min-h-screen text-white bg-gradient-to-br ${info.bg} transition-colors duration-700`;
+
+            document.getElementById('detail-city').textContent = cityName;
+            document.getElementById('detail-date').textContent = new Date().toLocaleDateString('zh-CN', {
+                year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+            });
+            document.getElementById('detail-temp').textContent = Math.round(current.temperature_2m);
+            document.getElementById('detail-desc').textContent = info.desc;
+            document.getElementById('detail-icon').innerHTML = getIcon(info.icon);
+            document.getElementById('detail-wind').textContent = `${current.wind_speed_10m} km/h`;
+            document.getElementById('detail-humidity').textContent = `${current.relative_humidity_2m}%`;
+
+            const maxToday = Math.round(daily.temperature_2m_max[0]);
+            const minToday = Math.round(daily.temperature_2m_min[0]);
+            document.getElementById('detail-range').textContent = `${maxToday}° / ${minToday}°`;
+
+            // 未来5天预报
+            const forecastList = document.getElementById('forecast-list');
+            forecastList.innerHTML = '';
+
+            for (let i = 1; i <= 5; i++) {
+                const date = new Date(daily.time[i]);
+                const dayName = date.toLocaleDateString('zh-CN', { weekday: 'short' });
+                const dateStr = date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+                const dayInfo = getInfo(daily.weather_code[i]);
+                const max = Math.round(daily.temperature_2m_max[i]);
+                const min = Math.round(daily.temperature_2m_min[i]);
+
+                const card = document.createElement('div');
+                card.className = 'bg-white/20 rounded-2xl p-3 text-center flex flex-col items-center justify-center';
+                card.innerHTML = `
+                    <p class="text-sm font-medium">${dayName}</p>
+                    <p class="text-xs text-blue-100 mb-2">${dateStr}</p>
+                    <div class="scale-75 origin-center mb-1">${getIcon(dayInfo.icon)}</div>
+                    <p class="text-xs mb-1">${dayInfo.desc}</p>
+                    <p class="font-bold text-sm">${max}° / ${min}°</p>
+                `;
+                forecastList.appendChild(card);
+            }
+
+            weatherDetailEl.classList.remove('hidden');
+            emptyStateEl.classList.add('hidden');
+        }
+
+        // 显示空状态
+        function showEmptyState() {
+            weatherDetailEl.classList.add('hidden');
+            emptyStateEl.classList.remove('hidden');
+            document.body.className = 'min-h-screen text-white bg-gradient-to-br from-blue-500 to-indigo-700 transition-colors duration-700';
+        }
+
+        // 事件监听
+        addBtn.addEventListener('click', () => addCity(cityInput.value));
+        cityInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') addCity(cityInput.value);
+        });
+
+        // 定位功能
+        locationBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                showError('您的浏览器不支持定位');
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                async (pos) => {
+                    const { latitude, longitude } = pos.coords;
+                    try {
+                        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=zh&format=json`);
+                        const data = await res.json();
+                        const cityName = data.results && data.results[0] ? data.results[0].name : '当前位置';
+                        
+                        // 如果存在则选中，否则添加
+                        const existing = cities.find(c => c.name === cityName);
+                        if (existing) {
+                            selectCity(existing.id);
+                        } else {
+                            cities.push({
+                                id: Date.now().toString(),
+                                name: cityName,
+                                lat: latitude,
+                                lon: longitude
+                            });
+                            saveCities();
+                            renderCityList();
+                            selectCity(cities[cities.length - 1].id);
+                        }
+                    } catch (err) {
+                        showError('定位失败');
+                    }
+                },
+                () => showError('无法获取位置，请检查权限')
+            );
+        });
+
+        // 初始化
+        loadCities();
+        renderCityList();
+        if (selectedCityId) {
+            selectCity(selectedCityId);
+        } else {
+            showEmptyState();
+        }
+    </script>
+</body>
+</html>
